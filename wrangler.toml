@@ -1,0 +1,7 @@
+name = "html-publisher"
+main = "dist/server/index.js"
+compatibility_date = "2026-08-01"
+
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "html-publisher-files"

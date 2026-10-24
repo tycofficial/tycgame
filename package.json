@@ -1,0 +1,13 @@
+{
+  "name": "html-publisher",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "跨设备 HTML 与静态 Web APP 云端发布器",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test": "node --test scripts/test.mjs",
+    "dev": "node scripts/dev.mjs"
+  },
+  "engines": { "node": ">=22" }
+}
