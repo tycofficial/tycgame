@@ -1,8 +1,20 @@
-# HTML 发布器
+# TycGame · HTML 发布器
 
 **[进入 HTML 发布器 →](https://tyc-html-publisher.tyc130923.chatgpt.site)**
 
 上传 HTML 或已经构建好的静态 Web APP，云端保存；在手机、家里电脑、学校机房登录同一个 ChatGPT 账户，即可从主页打开，或使用固定链接运行。网站默认仅所有者可访问，上传文件不会进入这个公开 GitHub 仓库。
+
+## GitHub Pages 发布入口
+
+根目录 `index.html` 与 `.nojekyll` 已准备好，入口名称为 **TycGame**。GitHub Pages 入口会自动打开上方云端发布器，登录、上传及云端文件存储由现有后端提供。
+
+仓库管理者需要首次完成以下设置；当前连接无法修改仓库名称或开启 Pages：
+
+1. 在 **Settings → General → Repository name** 将仓库名称改为 `TycGame`。
+2. 在 **Settings → Pages → Build and deployment** 选择 **Deploy from a branch**，分支选择 **main**，目录选择 **/(root)**，点击 **Save**。
+3. 等待 GitHub 完成发布，以 Pages 设置页显示的网站地址为准。采用上述仓库名称后，预期入口为 `https://tycofficial.github.io/TycGame/`；未完成设置前此地址尚未验证上线。
+
+以后推送到 `main` 分支时，GitHub Pages 会自动更新入口，无需安装依赖或运行 Worker 构建。请勿将整个发布器后端作为静态页面部署：GitHub Pages 不提供 Worker、认证或 R2 上传 API。
 
 ## 使用
 
