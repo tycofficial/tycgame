@@ -3,7 +3,7 @@
  * written into the repository. Upload objects live on a separate data branch.
  * GitHub rate/storage limits still apply; deleting a Git ref cannot erase history.
  */
-import { mimeFromPath } from './shared.js';
+import { mimeFromPath } from './shared.js?v=3';
 export const CHUNK_SIZE = 8 * 1024 * 1024;
 export const MAX_APP_BYTES = 2 * 1024 ** 3;
 export const MAX_FILES = 2000;

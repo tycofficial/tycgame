@@ -1,4 +1,4 @@
-import {parseRunRoute,encodeRunDescriptor} from './shared.js';
+import {parseRunRoute,encodeRunDescriptor} from './shared.js?v=3';
 export async function openShortlink(base){
   const current=new URL(location.href);const route=parseRunRoute(current,base);
   // Preserve a manager-provided route on refresh. This state contains no token;

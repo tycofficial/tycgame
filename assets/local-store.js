@@ -1,4 +1,4 @@
-import {CHUNK_SIZE,MAX_APP_BYTES,MAX_FILES,openLocalDB,requestResult,transactionDone,validateUpload,throwIfAborted,mimeFromPath} from './shared.js';
+import {CHUNK_SIZE,MAX_APP_BYTES,MAX_FILES,openLocalDB,requestResult,transactionDone,validateUpload,throwIfAborted,mimeFromPath} from './shared.js?v=3';
 export class LocalStore {
   constructor(){this.mode='local';this.limits={maxAppBytes:MAX_APP_BYTES,maxFiles:MAX_FILES,chunkSize:CHUNK_SIZE};}
   async connect(){await openLocalDB().then(db=>db.close());return {user:{login:'本地体验',name:'此设备'},repository:{fullName:'此设备 · IndexedDB',private:true,branch:''},limits:this.limits};}

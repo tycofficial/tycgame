@@ -3,7 +3,7 @@
  * session capability. This module never persists credentials or sends them to
  * the runtime window, an application, or a BroadcastChannel.
  */
-import {makeRunURL,encodeRunDescriptor,decodeRunDescriptor,parseRunRoute,DEFAULT_RUN_CONNECTION} from './shared.js';
+import {makeRunURL,encodeRunDescriptor,decodeRunDescriptor,parseRunRoute,DEFAULT_RUN_CONNECTION} from './shared.js?v=3';
 const siteRoot = new URL('../',import.meta.url);
 const CAP_PATTERN = /^[a-f0-9]{64}$/;
 const randomSession = () => Array.from(crypto.getRandomValues(new Uint8Array(32)),byte=>byte.toString(16).padStart(2,'0')).join('');
@@ -15,7 +15,7 @@ let runtimeEpoch = 0;
 
 async function runtimeWorker() {
   if (!isSecureContext || !('serviceWorker' in navigator)) throw new Error('运行应用需要 HTTPS 与支持 Service Worker 的浏览器。请使用 GitHub Pages 地址打开。');
-  const registration=await navigator.serviceWorker.register(new URL('sw.js',siteRoot),{scope:siteRoot.pathname,updateViaCache:'none'});
+  const registration=await navigator.serviceWorker.register(new URL('sw.js?v=3',siteRoot),{scope:siteRoot.pathname,updateViaCache:'none'});
   const worker=registration.installing || registration.waiting || registration.active;
   if (!worker) throw new Error('运行环境未能启动，请刷新后重试。');
   if (worker.state!=='activated') await new Promise((resolve,reject)=>{
@@ -143,7 +143,7 @@ async function bootRunner() {
     let connected=session?await exists(worker,session):false;
     if(session && !connected)connected=await reconnect();
     if(!connected){
-      const app=local ? await new (await import('./local-store.js')).LocalStore().getApp(slug) : await publicManifest(owner,repo,slug,branch);
+      const app=local ? await new (await import('./local-store.js?v=3')).LocalStore().getApp(slug) : await publicManifest(owner,repo,slug,branch);
       entry=app.entry;session=randomSession();
       await configure(worker,session,app,{mode:local?'local':'github',owner,repo,branch});
       route.name=app.name;route.entry=entry;saveRoute();
@@ -170,7 +170,7 @@ async function bootRunner() {
     // Message traffic contains only a random session capability and status.
     // The manager may reconnect this same immutable manifest after a browser
     // terminates an idle SW, without giving its token to the runtime window.
-    setInterval(async()=>{try{const current=(await navigator.serviceWorker.getRegistration(siteRoot.href))?.active || await runtimeWorker();if(!await exists(current,session)){let restored=local?false:await reconnect();if(!restored){const app=local?await new(await import('./local-store.js')).LocalStore().getApp(slug):await publicManifest(owner,repo,slug,branch);await configure(current,session,app,{mode:local?'local':'github',owner,repo,branch});restored=true;}if(restored){transferReady=false;await watch();frame.src=new URL('__tyc_runtime/'+session+'/'+encodedPath(entry),siteRoot).href;}}else await watch();if(!transferReady && !loadFailed && Date.now()-lastProgress>20000){byId('statusText').textContent='暂未收到新的文件进度。页面保持可见；如果应用依赖外部 CDN，可能仍在等待那些资源。';byId('retry').classList.remove('hidden');}}catch(error){fail(error.message || '运行连接已释放，请返回主页重新打开。');}},15000);
+    setInterval(async()=>{try{const current=(await navigator.serviceWorker.getRegistration(siteRoot.href))?.active || await runtimeWorker();if(!await exists(current,session)){let restored=local?false:await reconnect();if(!restored){const app=local?await new(await import('./local-store.js?v=3')).LocalStore().getApp(slug):await publicManifest(owner,repo,slug,branch);await configure(current,session,app,{mode:local?'local':'github',owner,repo,branch});restored=true;}if(restored){transferReady=false;await watch();frame.src=new URL('__tyc_runtime/'+session+'/'+encodedPath(entry),siteRoot).href;}}else await watch();if(!transferReady && !loadFailed && Date.now()-lastProgress>20000){byId('statusText').textContent='暂未收到新的文件进度。页面保持可见；如果应用依赖外部 CDN，可能仍在等待那些资源。';byId('retry').classList.remove('hidden');}}catch(error){fail(error.message || '运行连接已释放，请返回主页重新打开。');}},15000);
   } catch(error) {fail(error.message || '暂时无法打开此应用。');}
 }
 

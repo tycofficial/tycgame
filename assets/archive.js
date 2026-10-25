@@ -1,5 +1,5 @@
-import {Unzip,UnzipInflate,Zip,ZipPassThrough} from './vendor/fflate.js';
-import {MAX_APP_BYTES,MAX_FILES,safePath} from './shared.js';
+import {Unzip,UnzipInflate,Zip,ZipPassThrough} from './vendor/fflate.js?v=3';
+import {MAX_APP_BYTES,MAX_FILES,safePath} from './shared.js?v=3';
 const DOWNLOAD_LIMIT=512*1024*1024;
 function triggerDownload(blob,name){const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);}
 export async function unpackZip(file){

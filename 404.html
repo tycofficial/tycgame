@@ -4,5 +4,5 @@ const pieces=location.pathname.split('/').filter(Boolean);
 const project=location.hostname.endsWith('.github.io')&&pieces.length>1;
 const base=project?'/'+pieces[0]+'/':'/';
 document.getElementById('home').href=base;
-try{const mod=await import(base+'assets/shortlink.js');await mod.openShortlink(base);}catch(error){document.getElementById('heading').textContent='这个地址还没有应用';document.getElementById('message').textContent=error.message||'请返回应用库选择应用，或检查访问后缀是否正确。';}
+try{const mod=await import(base+'assets/shortlink.js?v=3');await mod.openShortlink(base);}catch(error){document.getElementById('heading').textContent='这个地址还没有应用';document.getElementById('message').textContent=error.message||'请返回应用库选择应用，或检查访问后缀是否正确。';}
 </script></body></html>
