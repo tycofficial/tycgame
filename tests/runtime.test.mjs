@@ -12,7 +12,7 @@ const token='unit-test-memory-only-credential';
 // Run the actual shipped Worker and its handlers. Only the browser platform
 // boundary and GitHub network are replaced; stream/Range/capability logic is
 // not copied into this test harness.
-function runtime({failPart=-1,size=8*MiB,count=3,requireAuthorization=false}={}) {
+function runtime({failPart=-1,size=8*MiB,count=3,requireAuthorization=false,faults=[],timerScale=1,cacheStorage}={}) {
   const stats={started:[],calls:[],active:0,maxActive:0,aborted:[]};
   const shas=Array.from({length:count},(_,index)=>(index+1).toString(16).repeat(40));
   const listeners=new Map();
@@ -22,6 +22,10 @@ function runtime({failPart=-1,size=8*MiB,count=3,requireAuthorization=false}={})
     assert.ok(index>=0,'Worker requested a blob outside the network fixture');
     const authorized=options.headers?.Authorization===`Bearer ${token}`;
     stats.calls.push({index,authorized});
+    const fault=faults.shift();
+    if(fault==='hang')return new Promise(()=>{});
+    if(fault==='network')throw new TypeError('simulated CORS/network failure');
+    if(fault===403)return new Response('rate limit',{status:403});
     if(requireAuthorization && !authorized)return new Response('private repository',{status:404});
     stats.started.push(index);
     if(index===failPart)throw new Error('simulated prefetch failure');
@@ -35,6 +39,7 @@ function runtime({failPart=-1,size=8*MiB,count=3,requireAuthorization=false}={})
     return new Response(new ReadableStream({
       start(controller){streamController=controller;},
       pull(controller){
+        if(fault==='body-hang')return;
         if(!remaining){finish();controller.close();return;}
         const length=Math.min(remaining,64*1024);remaining-=length;
         controller.enqueue(new Uint8Array(length).fill(65+index));
@@ -44,13 +49,14 @@ function runtime({failPart=-1,size=8*MiB,count=3,requireAuthorization=false}={})
   };
   const context=vm.createContext({
     self:{registration:{scope:base},location:{origin},addEventListener(type,handler){listeners.set(type,handler);}},
-    URL,Response,Headers,ReadableStream,AbortController,Blob,fetch,atob,
+    URL,Response,Headers,ReadableStream,AbortController,Blob,fetch,atob,setTimeout:(fn,ms)=>setTimeout(fn,ms*timerScale),clearTimeout,DOMException,...(cacheStorage?{caches:cacheStorage}:{}),
   });
-  vm.runInContext(workerSource+'\nglobalThis.runtimeUnderTest={fileStream,rangeOf};',context,{filename:'sw.js'});
+  vm.runInContext(workerSource+'\nglobalThis.runtimeUnderTest={fileStream,rangeOf,dropSessions:()=>sessions.clear()};',context,{filename:'sw.js'});
   const file={size:size*count,chunks:shas.map(sha=>({sha,size}))};
   const connection={mode:'github',owner:'owner',repo:'repo',branch:'data',token};
   return {
     stats,shas,
+    dropSessions(){context.runtimeUnderTest.dropSessions();},
     stream(range={offset:0,length:file.size}){return context.runtimeUnderTest.fileStream(connection,file,range);},
     range(header,length){return {...context.runtimeUnderTest.rangeOf(header,length)};},
     manifest(index=0,path='index.html'){
@@ -78,6 +84,68 @@ test('large runtime files stream with at most the current and next chunk in flig
   assert.deepEqual(r.stats.started,[0,1,2]);
   assert.equal(r.stats.maxActive,2);
   assert.equal(r.stats.active,0);
+});
+
+function publicCacheFixture(){
+  const stores=new Map(),key=value=>value.url || value.href || String(value);
+  return {stores,async open(name){if(!stores.has(name))stores.set(name,new Map());const data=stores.get(name);return {async match(value){return data.get(key(value))?.clone();},async put(value,response){data.set(key(value),response.clone());},async keys(){return [...data.keys()];},async delete(value){return data.delete(key(value));}};}};
+}
+
+test('authenticated connections use anonymous raw content when it is publicly readable',async()=>{
+  const r=runtime({size:512,count:1});
+  assert.equal(await consume(r.stream()),512);
+  assert.deepEqual(r.stats.calls,[{index:0,authorized:false}]);
+});
+
+test('raw CORS failure falls back to the GitHub API without sending credentials to raw',async()=>{
+  const r=runtime({size:512,count:1,faults:['network']});
+  assert.equal(await consume(r.stream()),512);
+  assert.deepEqual(r.stats.calls,[{index:0,authorized:false},{index:0,authorized:true}]);
+});
+
+test('a failed raw route is remembered so later chunks do not each repeat the same timeout',async()=>{
+  const r=runtime({size:512,count:2,faults:['network']});
+  assert.equal(await consume(r.stream()),1024);
+  assert.deepEqual(r.stats.calls,[{index:0,authorized:false},{index:0,authorized:true},{index:1,authorized:true}]);
+});
+
+test('stalled headers and stalled bodies time out and recover instead of hanging forever',async()=>{
+  for(const fault of ['hang','body-hang']){
+    const r=runtime({size:512,count:1,faults:[fault],timerScale:0.001});
+    assert.equal(await consume(r.stream()),512);
+    assert.equal(r.stats.calls.length,2);
+    assert.equal(r.stats.active,0);
+  }
+});
+
+test('API quota responses stop retries instead of consuming more requests',async()=>{
+  const r=runtime({size:512,count:1,faults:[403,403]});
+  await assert.rejects(consume(r.stream()),/配额|频率/);
+  assert.equal(r.stats.calls.length,2);
+});
+
+test('public content-addressed chunks are reused and public sessions recover after worker memory is released',async()=>{
+  const cacheStorage=publicCacheFixture(),r=runtime({size:512,count:1,cacheStorage});
+  const session='c'.repeat(64);
+  await r.message({type:'TYC_CONFIGURE',session,app:r.manifest(),connection:{mode:'github',owner:'owner',repo:'repo',token}});
+  const path='__tyc_runtime/'+session+'/index.html';
+  assert.equal((await(await r.request(path)).text()).length,512);
+  assert.equal(r.stats.calls.length,1);
+  r.dropSessions();
+  assert.equal((await(await r.request(path)).text()).length,512);
+  assert.equal(r.stats.calls.length,1);
+  for(const store of cacheStorage.stores.values())for(const response of store.values())assert.equal((await response.clone().text()).includes(token),false);
+});
+
+test('private chunks and credentials are not persisted in the public caches',async()=>{
+  const cacheStorage=publicCacheFixture(),r=runtime({size:512,count:1,cacheStorage,requireAuthorization:true});
+  const session='d'.repeat(64);
+  await r.message({type:'TYC_CONFIGURE',session,app:r.manifest(),connection:{mode:'github',owner:'owner',repo:'repo',private:true,token}});
+  const path='__tyc_runtime/'+session+'/index.html';
+  assert.equal((await(await r.request(path)).text()).length,512);
+  assert.equal([...cacheStorage.stores.values()].reduce((sum,store)=>sum+store.size,0),0);
+  r.dropSessions();
+  assert.equal((await r.request(path)).status,410);
 });
 
 test('runtime Range reads do not prefetch outside the requested chunk coverage',async()=>{

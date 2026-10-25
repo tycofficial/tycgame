@@ -39,4 +39,19 @@ export class LocalStore {
   async streamFile(id,path){const app=await this.getApp(id);const file=app.files.find(f=>f.path===path);if(!file)throw new Error('应用中没有这个文件。');let index=0;const stream=new ReadableStream({async pull(out){try{if(index===file.chunks.length){out.close();return;}const chunk=file.chunks[index++];const db=await openLocalDB();let item;try{item=await requestResult(db.transaction('chunks').objectStore('chunks').get(chunk.key));}finally{db.close();}if(!item||item.revision!==app.revision||item.size!==chunk.size)throw new Error('本地文件分块缺失，请重新上传。');out.enqueue(new Uint8Array(await item.data.arrayBuffer()));}catch(error){out.error(error);}}});return {stream,size:file.size,type:file.type,path};}
   async readFile(id,path){const file=await this.streamFile(id,path);return new Response(file.stream,{headers:{'content-type':file.type}}).blob();}
   async downloadApp(id){const app=await this.getApp(id);const files=[];for(const file of app.files)files.push({path:file.path,blob:await this.readFile(id,file.path)});return files;}
+  async sourceFiles(id){
+    const app=await this.getApp(id);if(app.status!=='ready')throw new Error('请先完成这个本地应用，再发布到云端。');
+    const db=await openLocalDB();
+    try{
+      const files=[];
+      for(const source of app.files){
+        const parts=[];
+        for(const chunk of source.chunks){const record=await requestResult(db.transaction('chunks').objectStore('chunks').get(chunk.key));if(!record||record.revision!==app.revision||record.data?.size!==chunk.size)throw new Error('本地文件分块缺失，请重新选择原文件发布。');parts.push(record.data);}
+        // Blob parts retain their backing storage. Migrating an existing local
+        // application never calls arrayBuffer() on an entire large HTML file.
+        files.push({path:source.path,file:new File(parts,source.path.split('/').pop(),{type:source.type,lastModified:source.lastModified||Date.now()})});
+      }
+      return {app,files};
+    }finally{db.close();}
+  }
 }

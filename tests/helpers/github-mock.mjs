@@ -7,8 +7,8 @@ const blobHash = bytes => createHash('sha1').update(`blob ${bytes.length}\0`).up
 const json = (body, status=200) => new Response(JSON.stringify(body), {status,headers:{'content-type':'application/json'}});
 
 export class GitHubMock {
-  constructor({privateRepo=false}={}) {
-    this.privateRepo=privateRepo;this.refs=new Map();this.blobs=new Map();this.trees=new Map();this.commits=new Map();this.calls=[];this.count=0;this.conflictOnce=null;
+  constructor({privateRepo=false,owner='qa-user',repo='qa-repo'}={}) {
+    this.owner=owner;this.repo=repo;this.privateRepo=privateRepo;this.refs=new Map();this.blobs=new Map();this.trees=new Map();this.commits=new Map();this.calls=[];this.count=0;this.conflictOnce=null;
     const index=this.blob(Buffer.from('<!doctype html><title>Original source</title>'));
     const tree=this.tree(new Map([['index.html',index]]));this.main=this.commit(tree,[],'Initial source');this.refs.set('main',this.main);
   }
@@ -31,8 +31,8 @@ export class GitHubMock {
     if(u.hostname!=='api.github.com')return json({message:'Unexpected destination'},500);
     if(u.pathname==='/user')return authorized?json({login:'qa-user',name:'QA User',avatar_url:''}):json({message:'Bad credentials'},401);
     if((method!=='GET'||this.privateRepo)&&!authorized)return json({message:'Bad credentials'},401);
-    const prefix='/repos/qa-user/qa-repo';if(!u.pathname.startsWith(prefix))return json({message:'Not found'},404);const path=decodeURIComponent(u.pathname.slice(prefix.length));
-    if(path===''&&method==='GET')return json({full_name:'qa-user/qa-repo',private:this.privateRepo,default_branch:'main',permissions:{push:true}});
+    const prefix=`/repos/${this.owner}/${this.repo}`;if(!u.pathname.startsWith(prefix))return json({message:'Not found'},404);const path=decodeURIComponent(u.pathname.slice(prefix.length));
+    if(path===''&&method==='GET')return json({full_name:`${this.owner}/${this.repo}`,private:this.privateRepo,default_branch:'main',permissions:{push:true}});
     let m;
     if(method==='GET'&&(m=/^\/git\/ref\/heads\/(.+)$/.exec(path))){const sha=this.refs.get(m[1]);return sha?json({ref:`refs/heads/${m[1]}`,object:{sha}}):json({message:'Not Found'},404);}
     if(method==='GET'&&(m=/^\/git\/commits\/([a-f0-9]+)$/.exec(path))){const c=this.commits.get(m[1]);return c?json(c):json({message:'Not Found'},404);}
@@ -54,5 +54,5 @@ export class GitHubMock {
     }
     return json({message:`Unhandled mock route ${method} ${path}`},500);
   };
-  store(extra={}){return new GitHubStore({owner:'qa-user',repo:'qa-repo',branch:'tycgame-data',token:TOKEN,fetch:this.fetch,writeInterval:0,...extra});}
+  store(extra={}){return new GitHubStore({owner:this.owner,repo:this.repo,branch:'tycgame-data',token:TOKEN,fetch:this.fetch,writeInterval:0,...extra});}
 }

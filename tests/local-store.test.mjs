@@ -36,3 +36,13 @@ test('deleting between completed chunks and publication cannot resurrect a local
  const store=new LocalStore();const original=store._saveApp.bind(store);store._saveApp=async app=>{await store.deleteApp(app.id);return original(app);};
  await assert.rejects(()=>store.upload(opts('delete-race')),/删除/);await assert.rejects(()=>store.getApp('delete-race'),/找不到/);
 });
+
+test('existing local files can be republished from stored Blob parts without decoding the whole application',async()=>{
+ const store=new LocalStore();const input=opts('migrate-local',[{path:'index.html',file:file('<h1>Keep my existing app</h1>')},{path:'assets/image.bin',file:new File([new Uint8Array([0,255,7])],'image.bin')}]);
+ const saved=await store.upload(input);
+ const result=await store.sourceFiles(saved.id);assert.equal(result.app.revision,saved.revision);
+ assert.deepEqual(result.files.map(f=>f.path),['index.html','assets/image.bin']);
+ assert.equal(await result.files[0].file.text(),'<h1>Keep my existing app</h1>');
+ assert.deepEqual([...new Uint8Array(await result.files[1].file.arrayBuffer())],[0,255,7]);
+ await store.deleteApp(saved.id);
+});

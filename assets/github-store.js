@@ -115,6 +115,10 @@ export class GitHubStore {
   #writeInterval;
   #connection = null;
   #readManifests = new Map();
+  #commitTrees = new Map();
+  #jsonCache = new Map();
+  #jsonCacheSize = 0;
+  #readTimeout;
 
   constructor(config = {}) {
     this.owner = config.owner || 'tycofficial';
@@ -125,6 +129,7 @@ export class GitHubStore {
     this.#fetch = config.fetch || globalThis.fetch.bind(globalThis);
     // GitHub has secondary content-creation limits as well as hourly API limits.
     this.#writeInterval = Number.isFinite(config.writeInterval) ? Math.max(0, config.writeInterval) : 950;
+    this.#readTimeout = Number.isFinite(config.readTimeout) ? Math.max(25, config.readTimeout) : 15000;
     this.#validateConfig();
   }
   #validateConfig() {
@@ -136,8 +141,19 @@ export class GitHubStore {
   get authenticated() { return !!this.#token; }
   get connection() { return this.#connection ? copy(this.#connection) : null; }
   // Trusted runner bootstrap only. Never serialize this into persistent storage.
-  runtimeConfig() { return { mode: 'github', owner: this.owner, repo: this.repo, branch: this.branch, token: this.#token }; }
-  disconnect() { this.#token = ''; this.#connection = null; this.#readManifests.clear(); }
+  runtimeConfig() { return { mode: 'github', owner: this.owner, repo: this.repo, branch: this.branch, token: this.#token, private: this.#connection?.repository?.private }; }
+  #clearReads() { this.#readManifests.clear(); this.#commitTrees.clear(); this.#jsonCache.clear(); this.#jsonCacheSize = 0; }
+  disconnect() { this.#token = ''; this.#connection = null; this.#clearReads(); }
+  #cacheTree(sha, tree) { const key=`${this.owner}/${this.repo}:${sha}`; this.#commitTrees.set(key,tree); if(this.#commitTrees.size>32)this.#commitTrees.delete(this.#commitTrees.keys().next().value); }
+  #cacheJSON(path, ref, text) {
+    // Only immutable commit identifiers are cached. Branch reads remain fresh
+    // across devices; every mutation uses its actual current Git reference.
+    if(!shaPattern.test(ref)||text.length>2*1024*1024)return;
+    const key=`${this.owner}/${this.repo}:${ref}:${path}`;
+    this.#jsonCacheSize-=this.#jsonCache.get(key)?.length||0;
+    this.#jsonCache.delete(key);this.#jsonCache.set(key,text);this.#jsonCacheSize+=text.length;
+    while(this.#jsonCache.size>16||this.#jsonCacheSize>2*1024*1024){const first=this.#jsonCache.keys().next().value;this.#jsonCacheSize-=this.#jsonCache.get(first).length;this.#jsonCache.delete(first);}
+  }
   #path(path = '') { return `/repos/${enc(this.owner)}/${enc(this.repo)}${path}`; }
   #writeRequired() { if (!this.#token) problem('请先连接 GitHub 访问令牌，再保存到云端。', 401); }
 
@@ -161,13 +177,13 @@ export class GitHubStore {
       const headers = { Accept: raw ? 'application/vnd.github.raw+json' : 'application/vnd.github+json', 'X-GitHub-Api-Version': VERSION };
       if (this.#token) headers.Authorization = `Bearer ${this.#token}`;
       if (body !== undefined) headers['Content-Type'] = 'application/json';
-      let response;
-      try { response = await this.#fetch(API + path, { method, headers, signal, body: body === undefined ? undefined : JSON.stringify(body), cache: 'no-store', credentials: 'omit', redirect: 'follow' }); }
-      catch (error) {
-        if (signal?.aborted || error.name === 'AbortError') throw abortError();
-        if (attempt < retries) { await sleep(Math.min(800 * 2 ** attempt, 5000), signal); continue; }
-        throw new GitHubError('无法连接 GitHub。请检查网络、GitHub API 可达性后重试。', 0, { cause: error });
-      }
+      const controller=new AbortController();let timedOut=false;
+      const cancel=()=>controller.abort(signal?.reason);
+      signal?.addEventListener('abort',cancel,{once:true});
+      if(signal?.aborted)cancel();
+      const timer=setTimeout(()=>{timedOut=true;controller.abort();},write||raw?120000:this.#readTimeout);
+      try {
+      const response = await this.#fetch(API + path, { method, headers, signal:controller.signal, body: body === undefined ? undefined : JSON.stringify(body), cache: 'no-store', credentials: 'omit', redirect: 'follow' });
       if (response.ok) {
         if (response.status === 204) return null;
         if (raw) {
@@ -182,7 +198,7 @@ export class GitHubStore {
           }
           return bytes;
         }
-        return response.json();
+        return await response.json();
       }
       let data = {}; try { data = await response.json(); } catch {}
       const rateLimited = response.status === 429 || (response.status === 403 && (response.headers.get('x-ratelimit-remaining') === '0' || response.headers.has('retry-after') || /rate limit|abuse|secondary rate/i.test(data.message || '')));
@@ -198,11 +214,19 @@ export class GitHubStore {
       else if (response.status === 409 || response.status === 422) message = '云端数据正在更新或提交冲突，请稍后继续。';
       else if (response.status === 413) message = '上传分块超过 GitHub 的请求限制。';
       throw new GitHubError(message, response.status, { retryAfterSeconds: retryAfter || undefined, githubMessage: data.message });
+      } catch(error) {
+        if(signal?.aborted)throw abortError();
+        if(error instanceof GitHubError)throw error;
+        // Metadata cannot leave a blank window waiting forever. A timed-out
+        // metadata read fails promptly instead of silently retrying for minutes.
+        if(!timedOut&&attempt<retries){await sleep(Math.min(800*2**attempt,5000),signal);continue;}
+        throw new GitHubError(timedOut?'GitHub 响应超时，请重试；已提交的上传进度会保留。':'无法连接 GitHub，请检查网络后重试。',0,{cause:error});
+      } finally {clearTimeout(timer);signal?.removeEventListener('abort',cancel);}
     }
   }
 
   async connect(config = {}) {
-    this.#readManifests.clear();
+    this.#clearReads();
     if (config.owner !== undefined) this.owner = String(config.owner).trim();
     if (config.repo !== undefined) this.repo = String(config.repo).trim();
     if (config.branch !== undefined) this.branch = String(config.branch).trim();
@@ -227,11 +251,16 @@ export class GitHubStore {
     try {
       const ref = await this.#request(this.#path(`/git/ref/heads/${branch.split('/').map(enc).join('/')}`), { signal });
       const sha = safeSHA(ref.object?.sha);
+      const cached=this.#commitTrees.get(`${this.owner}/${this.repo}:${sha}`);
+      if(cached)return {sha,tree:cached};
       const commit = await this.#request(this.#path(`/git/commits/${sha}`), { signal });
-      return { sha, tree: safeSHA(commit.tree?.sha) };
+      const tree=safeSHA(commit.tree?.sha);this.#cacheTree(sha,tree);
+      return { sha, tree };
     } catch (error) { if (error.status === 404) return null; throw error; }
   }
   async #jsonAt(path, ref, signal, optional = false) {
+    const cached=this.#jsonCache.get(`${this.owner}/${this.repo}:${ref}:${path}`);
+    if(cached!==undefined)return JSON.parse(cached);
     try {
       const data = await this.#request(this.#path(`/contents/${path.split('/').map(enc).join('/')}?ref=${enc(ref)}`), { signal });
       let bytes;
@@ -239,7 +268,7 @@ export class GitHubStore {
       else if (data.sha) bytes = await this.readChunk(data.sha, { signal });
       else problem('GitHub 云端清单读取失败。', 502);
       if (bytes.byteLength > 8 * 1024 * 1024) problem('云端清单过大。', 422);
-      try { return JSON.parse(new TextDecoder().decode(bytes)); } catch { problem('GitHub 云端清单不是有效的 JSON。', 422); }
+      try {const text=new TextDecoder().decode(bytes);const value=JSON.parse(text);this.#cacheJSON(path,ref,text);return value;} catch { problem('GitHub 云端清单不是有效的 JSON。', 422); }
     } catch (error) { if (optional && error.status === 404) return null; throw error; }
   }
   async #catalog(head, signal) {
@@ -261,6 +290,7 @@ export class GitHubStore {
     const commit = await this.#request(this.#path('/git/commits'), { method: 'POST', signal, body: { message: 'Initialize TycGame application storage', tree: tree.sha, parents: [source.sha] } });
     try {
       await this.#request(this.#path('/git/refs'), { method: 'POST', signal, body: { ref: `refs/heads/${this.branch}`, sha: commit.sha } });
+      this.#cacheTree(commit.sha,tree.sha);this.#cacheJSON('catalog.json',commit.sha,JSON.stringify(emptyCatalog()));
       return { sha: commit.sha, tree: tree.sha };
     } catch (error) {
       if (error.status === 409 || error.status === 422) { head = await this.#head(signal); if (head) return head; }
@@ -284,6 +314,8 @@ export class GitHubStore {
         const commit = await this.#request(this.#path('/git/commits'), { method: 'POST', signal, body: { message: mutation.message || 'Update TycGame application storage', tree: tree.sha, parents: [head.sha] } });
         try {
           await this.#request(this.#path(`/git/refs/heads/${this.branch.split('/').map(enc).join('/')}`), { method: 'PATCH', signal, body: { sha: commit.sha, force: false } });
+          this.#cacheTree(commit.sha,tree.sha);
+          for(const entry of entries)if(typeof entry.content==='string')this.#cacheJSON(entry.path,commit.sha,entry.content);
           this.#readManifests.clear();
           return mutation.result;
         } catch (error) {
@@ -299,15 +331,17 @@ export class GitHubStore {
 
   async listApps() {
     this.#readManifests.clear();
-    const catalog = await this.#catalog(await this.#head());
+    // Contents can resolve a branch itself: one request replaces ref + commit
+    // + catalog requests for ordinary viewing, without stale branch caching.
+    const catalog = validCatalog(await this.#jsonAt('catalog.json',this.branch,undefined,true)||emptyCatalog());
     return catalog.apps.map(publicSummary).sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
   }
   async getApp(id) {
     validateSlug(id);
-    const head = await this.#head();
-    if (!head) problem('还没有云端应用。', 404);
-    const app = validateManifest(await this.#jsonAt(manifestPath(id), head.sha));
-    this.#readManifests.set(id, { app, at: Date.now() });
+    const cached=this.#readManifests.get(id);
+    if(cached&&Date.now()-cached.at<20000)return copy(cached.app);
+    const app = validateManifest(await this.#jsonAt(manifestPath(id),this.branch));
+    this.#readManifests.set(id, { app: copy(app), at: Date.now() });
     return app;
   }
   async #createApp(app, signal) {

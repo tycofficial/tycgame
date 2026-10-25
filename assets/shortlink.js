@@ -1,11 +1,13 @@
-import {LocalStore} from './local-store.js';
-import {validSlug,makeRunURL} from './shared.js';
+import {parseRunRoute,encodeRunDescriptor} from './shared.js';
 export async function openShortlink(base){
-  const current=new URL(location.href);const paths=current.pathname.slice(base.length).split('/').filter(Boolean);
-  const slug=paths[0]==='a'?paths[1]:paths[0];
-  if(!validSlug(slug)||paths.length>(paths[0]==='a'?2:1))throw new Error('地址无效');
-  let local=false;
-  try{const app=await new LocalStore().getApp(slug);local=app.status==='ready';}catch{}
-  const connection=local?{mode:'local'}:{mode:'github',owner:current.searchParams.get('owner')||'tycofficial',repo:current.searchParams.get('repo')||'tycgame',branch:current.searchParams.get('branch')||'tycgame-data'};
-  location.replace(makeRunURL({id:slug,slug},connection));
+  const current=new URL(location.href);const route=parseRunRoute(current,base);
+  // Preserve a manager-provided route on refresh. This state contains no token;
+  // copied URLs remain independently resolvable from their path alone.
+  const previous=history.state?.tycgameRoute;
+  const compatible=previous?.slug===route.slug && previous.shortPath===route.shortPath && previous.connection?.mode===route.connection.mode && (route.connection.mode==='local' || (previous.connection.owner===route.connection.owner && previous.connection.repo===route.connection.repo && previous.connection.branch===route.connection.branch));
+  if(compatible){if(previous.entry)route.entry=previous.entry;if(previous.name)route.name=previous.name;}
+  const url=new URL(base+'run.html',current.origin);
+  const fragment=new URLSearchParams({route:encodeRunDescriptor(route,base)});
+  const session=compatible?history.state?.tycgameSession:null;if(/^[a-f0-9]{64}$/.test(session||''))fragment.set('session',session);
+  url.hash=fragment.toString();location.replace(url.href);
 }

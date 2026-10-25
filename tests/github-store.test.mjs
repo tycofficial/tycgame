@@ -74,3 +74,28 @@ test('two devices can initialize and publish different apps without losing eithe
 test('concurrent devices reserve a duplicate slug atomically',async()=>{
   const api=new GitHubMock();const one=api.store(),two=api.store();await Promise.all([one.connect(),two.connect()]);const result=await Promise.allSettled([one.upload(options('shared-slug')),two.upload(options('shared-slug'))]);assert.equal(result.filter(r=>r.status==='fulfilled').length,1);assert.equal(result.filter(r=>r.status==='rejected'&&r.reason.status===409).length,1);assert.equal((await one.listApps()).length,1);assert.equal((await one.getApp('shared-slug')).status,'ready');
 });
+
+test('viewing the cloud catalog and opening its manifest use one request each',async()=>{
+  const api=new GitHubMock();await api.store().upload(options('quota-app'));
+  const viewer=api.store({token:''});const before=api.calls.length;
+  assert.equal((await viewer.listApps())[0].id,'quota-app');
+  assert.equal(api.calls.length-before,1);
+  const manifest=await viewer.getApp('quota-app');assert.equal(manifest.status,'ready');
+  assert.equal(api.calls.length-before,2);
+  manifest.name='Only a caller mutation';
+  assert.equal((await viewer.getApp('quota-app')).name,'Hello app');
+  assert.equal(api.calls.length-before,2,'reopening within the current view does not reread its manifest');
+  await api.store().renameApp('quota-app','Changed on another device');
+  assert.equal((await viewer.listApps())[0].name,'Changed on another device');
+  assert.equal((await viewer.getApp('quota-app')).name,'Changed on another device');
+});
+
+test('a stalled metadata body times out instead of keeping cloud startup pending forever',async()=>{
+  const api=new GitHubMock();await api.store().upload(options('timeout-app'));
+  const fetch=async(url,options)=>{
+    if(String(url).includes('/contents/catalog.json'))return new Response(new ReadableStream({start(controller){options.signal.addEventListener('abort',()=>controller.error(new DOMException('Aborted','AbortError')),{once:true});}}),{headers:{'content-type':'application/json'}});
+    return api.fetch(url,options);
+  };
+  const store=api.store({fetch,readTimeout:30});
+  await assert.rejects(store.listApps(),error=>error.status===0&&/超时/.test(error.message));
+});
