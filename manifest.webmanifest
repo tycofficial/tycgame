@@ -1,0 +1,11 @@
+{
+  "name": "TycGame · HTML Publisher",
+  "short_name": "TycGame",
+  "description": "上传、收藏、运行你的 HTML 与 Web APP",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f6f5f2",
+  "theme_color": "#1b2028",
+  "icons": [{"src":"assets/icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}]
+}

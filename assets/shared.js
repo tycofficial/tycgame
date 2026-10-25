@@ -1,0 +1,37 @@
+export const CHUNK_SIZE = 8 * 1024 * 1024;
+export const MAX_APP_BYTES = 2 * 1024 ** 3;
+export const MAX_FILES = 2000;
+export const LOCAL_DB_NAME = 'tycgame-v2';
+export const LOCAL_DB_VERSION = 1;
+const TYPES = {html:'text/html;charset=utf-8',htm:'text/html;charset=utf-8',js:'text/javascript;charset=utf-8',mjs:'text/javascript;charset=utf-8',css:'text/css;charset=utf-8',json:'application/json',wasm:'application/wasm',svg:'image/svg+xml',png:'image/png',jpg:'image/jpeg',jpeg:'image/jpeg',webp:'image/webp',gif:'image/gif',ico:'image/x-icon',avif:'image/avif',mp3:'audio/mpeg',ogg:'audio/ogg',wav:'audio/wav',mp4:'video/mp4',webm:'video/webm',woff:'font/woff',woff2:'font/woff2',ttf:'font/ttf',txt:'text/plain;charset=utf-8',xml:'application/xml',pdf:'application/pdf',webmanifest:'application/manifest+json'};
+export const mimeFromPath = path => TYPES[path.split('.').pop().toLowerCase()] || 'application/octet-stream';
+export function abortError() { return new DOMException('传输已暂停，已完成的分块会保留。', 'AbortError'); }
+export function throwIfAborted(signal) { if(signal?.aborted) throw abortError(); }
+export function safePath(value) {
+  if(typeof value!=='string'||!value||value.length>1024||value.startsWith('/')||/[\\\x00-\x1f\x7f?#]/.test(value)||value.split('/').some(p=>!p||p==='.'||p==='..'))throw new Error('文件路径无效：请使用相对路径，不要包含 .. 或反斜线。');
+  return value.normalize('NFC');
+}
+export function validSlug(value) { return typeof value==='string'&&/^[a-z0-9][a-z0-9-]{2,63}$/.test(value)&&!value.endsWith('-'); }
+export function slugify(name='app') { const slug=name.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,45);return (slug.length>=3?slug:'app')+'-'+crypto.randomUUID().slice(0,6); }
+export function validateUpload({name,slug,entry,files}) {
+  name=String(name||'').trim();if(!name||name.length>80)throw new Error('应用名称需要 1–80 个字符。');
+  slug=slug||slugify(name);if(!validSlug(slug))throw new Error('访问后缀需为 3–64 位小写字母、数字或连字符。');
+  if(!Array.isArray(files)||!files.length||files.length>MAX_FILES)throw new Error(`请选择 1–${MAX_FILES} 个文件。`);
+  const seen=new Set();let totalBytes=0;
+  const list=files.map(item=>{const path=safePath(item.path||item.file?.webkitRelativePath||item.file?.name);if(seen.has(path))throw new Error('存在重复文件路径：'+path);seen.add(path);const file=item.file;if(!file||!Number.isSafeInteger(file.size)||file.size<0||typeof file.slice!=='function')throw new Error('文件内容无效。');totalBytes+=file.size;return {file,path};});
+  if(totalBytes>MAX_APP_BYTES)throw new Error('单个应用最多 2 GiB，存储服务还可能有其他配额。');
+  entry=safePath(entry||'index.html');if(!seen.has(entry)||!/[.]html?$/i.test(entry))throw new Error('请选择上传文件中的一个 HTML 入口。');
+  return {name,slug,entry,files:list,totalBytes};
+}
+export function getBasePath() { return new URL('../',import.meta.url).pathname; }
+export function makeRunURL(app,connection={mode:'local'}) {
+  const url=new URL('../run.html',import.meta.url);url.searchParams.set('app',app.slug||app.id);
+  if(connection.mode==='local')url.searchParams.set('mode','local');
+  else {url.searchParams.set('owner',connection.owner||'tycofficial');url.searchParams.set('repo',connection.repo||'tycgame');url.searchParams.set('branch',connection.branch||'tycgame-data');}
+  return url.href;
+}
+export function openLocalDB() {
+  return new Promise((resolve,reject)=>{const request=indexedDB.open(LOCAL_DB_NAME,LOCAL_DB_VERSION);request.onupgradeneeded=()=>{const db=request.result;if(!db.objectStoreNames.contains('apps'))db.createObjectStore('apps',{keyPath:'id'});if(!db.objectStoreNames.contains('chunks')){const store=db.createObjectStore('chunks',{keyPath:'id'});store.createIndex('appId','appId');}};request.onerror=()=>reject(request.error);request.onsuccess=()=>resolve(request.result);});
+}
+export function requestResult(request) { return new Promise((resolve,reject)=>{request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error);}); }
+export function transactionDone(transaction) { return new Promise((resolve,reject)=>{transaction.oncomplete=()=>resolve();transaction.onerror=()=>reject(transaction.error);transaction.onabort=()=>reject(transaction.error||new Error('本地保存事务已取消'));}); }

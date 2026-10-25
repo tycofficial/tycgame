@@ -1,0 +1,8 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>正在打开应用 · TycGame</title><style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f6f5f2;color:#252931;font:15px/1.8 system-ui}main{max-width:480px;padding:36px}small{color:#7463c6;font-weight:700;letter-spacing:2px}h1{font-size:26px;letter-spacing:-1px}p{color:#727580}a{color:#7561d5}</style></head><body><main><small>TYCGAME / YOUR APPS, ANYWHERE</small><h1 id="heading">正在打开你的应用</h1><p id="message">正在查找这个访问后缀…</p><a id="home" href="./">返回应用库 →</a></main><script type="module">
+const pieces=location.pathname.split('/').filter(Boolean);
+const project=location.hostname.endsWith('.github.io')&&pieces.length>1;
+const base=project?'/'+pieces[0]+'/':'/';
+document.getElementById('home').href=base;
+try{const mod=await import(base+'assets/shortlink.js');await mod.openShortlink(base);}catch{document.getElementById('heading').textContent='这个地址还没有应用';document.getElementById('message').textContent='请返回应用库选择应用，或检查访问后缀是否正确。';}
+</script></body></html>

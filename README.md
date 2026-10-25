@@ -1,62 +1,84 @@
-# TycGame · HTML 发布器
+# TycGame · HTML Publisher
 
-**[进入 HTML 发布器 →](https://tyc-html-publisher.tyc130923.chatgpt.site)**
+一个完整运行在 **GitHub Pages** 上的 HTML 与静态 Web APP 发布器。网站首页就是发布器，可直接选择文件、管理应用并打开运行；没有站外跳转，不需要另外部署服务器。
 
-上传 HTML 或已经构建好的静态 Web APP，云端保存；在手机、家里电脑、学校机房登录同一个 ChatGPT 账户，即可从主页打开，或使用固定链接运行。网站默认仅所有者可访问，上传文件不会进入这个公开 GitHub 仓库。
+默认网站地址：**https://tycofficial.github.io/tycgame/**。如果仓库名改为 `TycGame`，请使用 GitHub Pages 设置页提供的相应地址。所有资源采用相对路径，兼容仓库子路径。
 
-## GitHub Pages 发布入口
+## 两种存储方式
 
-根目录 `index.html` 与 `.nojekyll` 已准备好，入口名称为 **TycGame**。GitHub Pages 入口会自动打开上方云端发布器，登录、上传及云端文件存储由现有后端提供。
+| 方式 | 保存位置 | 换设备访问 | 连接要求 |
+| --- | --- | --- | --- |
+| 本地体验 | 当前浏览器 IndexedDB | 不会自动同步 | 无需账号，可立即使用 |
+| GitHub 云端 | 所选仓库的独立 `tycgame-data` 数据分支 | 连接同一个仓库即可读取 | GitHub 仓库访问令牌；公开应用运行可匿名读取 |
 
-仓库管理者需要首次完成以下设置；当前连接无法修改仓库名称或开启 Pages：
+本地体验与云端模式在界面中明确区分，不会把浏览器本地文件显示成已同步到云端。源码保存在 `main`，应用上传到独立数据分支；程序拒绝把默认源码分支用作数据分支。
 
-1. 在 **Settings → General → Repository name** 将仓库名称改为 `TycGame`。
-2. 在 **Settings → Pages → Build and deployment** 选择 **Deploy from a branch**，分支选择 **main**，目录选择 **/(root)**，点击 **Save**。
-3. 等待 GitHub 完成发布，以 Pages 设置页显示的网站地址为准。采用上述仓库名称后，预期入口为 `https://tycofficial.github.io/TycGame/`；未完成设置前此地址尚未验证上线。
+## 开始使用
 
-以后推送到 `main` 分支时，GitHub Pages 会自动更新入口，无需安装依赖或运行 Worker 构建。请勿将整个发布器后端作为静态页面部署：GitHub Pages 不提供 Worker、认证或 R2 上传 API。
+1. 打开 GitHub Pages 网站，在本地体验中先试用示例，或选择 HTML、ZIP、文件夹、多文件。
+2. 填写应用名，选择 HTML 入口和访问后缀；多文件工程应上传**构建产物**，而非未构建的工程源码。
+3. 上传后从应用库打开；应用在独立窗口运行，支持相对资源、ES modules、JSON、Wasm 和浏览器存储。
+4. 要跨设备使用，点击连接 GitHub，选择数据仓库并填写访问令牌，再进行云端上传。
+5. 暂停或离开后重新选择同一批原始文件，即可续传。云端续传会校验已上传分块的内容，避免同名同大小文件被错误拼接。
 
-## 使用
+### 连接 GitHub
 
-1. 打开上方网站，用同一个 ChatGPT 账户登录。
-2. 选择单个 HTML、多文件或整个构建输出目录，选择 HTML 入口。手机浏览器对文件夹选择的支持不同，可使用文件多选。
-3. 填写名称和可选后缀，开始上传。默认 4 路并发，可选择 2 / 4 / 6；每片 8 MiB，失败自动重试。
-4. 上传完成后，从主页打开应用，或访问 `网站地址/a/后缀/`。也可输入 `网站地址/后缀`，网站会自动跳转。
-5. 上传中途暂停或关闭页面后，可从应用卡片继续，重新选择同一批原始文件。已完成的分块保存在云端，无需重复传输；换设备继续也需要拿到原文件。
+建议使用只授权**目标数据仓库**的 fine-grained personal access token：
 
-固定链接与登录账户关联，复制链接不会将文件公开给其他账户。清单与文件跨设备同步，上传应用自身的运行数据是否同步取决于应用实现。
+- 在 [GitHub 令牌设置](https://github.com/settings/personal-access-tokens/new) 创建令牌，选择仓库所有者和目标仓库。
+- Repository permissions 中授予 **Contents: Read and write**，Metadata 保留默认读取；无需授权修改仓库设置或工作流。
+- 在发布器连接窗口填写 `owner/repo`、数据分支 `tycgame-data` 以及令牌。令牌只在当前管理标签页和运行器的内存中使用；不写入 URL、Git 提交、localStorage、sessionStorage 或 IndexedDB。刷新后需重新连接。
+- 公开仓库中的上传文件是公开的；需要私人文件时请选择有权限写入的**私有数据仓库**。私有数据仓库与托管网站的公开仓库可以不同。
 
-## 能力与边界
+不要在聊天、代码或公开页面中发送令牌。公开仓库的运行链接无需令牌；私有应用需先连接仓库，再从应用库运行。私有运行会话使用内存中的只读文件映射，建议保持管理标签页打开，供浏览器回收 Service Worker 后重建连接。
 
-- 单个应用允许 **2 GiB**、最多 **2,000 个文件**，支持 100 MiB 以上单文件 HTML 和 1 GiB 静态应用的分块传输。实际存储、流量、请求数仍受部署平台及 R2 配额约束。大文件清单与流式响应通过自动检查；没有进行 1 GiB 真实公网测速。
-- 大 HTML 从 R2 流式返回，支持 HTTP Range；不会在 Worker 中拼接整个文件。浏览器按自身能力并发加载资源，不会为单个 HTML 强行并行下载后在内存里合并。浏览器能否运行超大 HTML 取决于设备内存和应用代码。
-- 支持 HTML/CSS/JS/Wasm、图片、音视频等静态产物。React/Vue/Vite 等工程需先构建，推荐相对路径（例如 Vite `base: './'`）。不运行 Node、Python、PHP、数据库服务或未构建的工程源码。
-- 上传内容使用 CSP 安全沙箱，与管理 API 隔离。依赖 `localStorage`、IndexedDB、Service Worker、顶层导航或严格同源权限的应用可能不兼容；私有站点登录也可能影响模块、字体、跨源 fetch 等资源。需要完整浏览器权限时，应部署到独立运行域名，再增加隔离运行网关。当前没有宣称任意 Web APP 都可运行。
-- 当前采用部署平台的网络，**没有境内专线或国内节点测速证明**。并发、分块和重试能改善部分网络条件，不保证在所有地区或校园网络可达，不能绕过配额。
-- 网站支持运行现成应用；它不是在线代码编辑器。页面中的体验示例也通过真实上传流程写入云端。
+## 上传与运行
 
-## 实现
+- HTML、文件夹、ZIP、多文件上传；8 MiB 分块，可选择 2 / 4 / 6 路并发。
+- 对 GitHub 的写入有节流与限流重试，遇到配额限制时保留已提交的进度，不绕过 GitHub 的限制。
+- 每个应用的程序边界为 **2 GiB、2000 文件**。支持 100 MiB 以上 HTML 和 1 GiB 多文件清单；实际保存、上传时长及运行能力还取决于 GitHub 配额、网络、浏览器和设备。未进行 1 GiB 公网传输测速。
+- 运行器使用 Service Worker 从分块流式返回资源，支持 Range/HEAD，不先把整个大 HTML 拼成一个字符串。
+- 文件夹和 ZIP 会保留目录结构；ZIP 的共同根目录会自动剥除。Vite 等工程推荐 `base: './'`。以根路径 `/assets/...` 构建的应用需要改成相对路径，才能在仓库子路径与独立应用路径下正常运行。
+- 可以搜索、筛选、排序、重命名、复制运行链接、下载 HTML/ZIP 和删除应用。支持大 ZIP 流式保存的浏览器会使用文件保存接口；其他浏览器的大文件下载受到内存限制。
+- 运行地址类似 `run.html?owner=你的账户&repo=数据仓库&branch=tycgame-data&app=后缀`。通过后缀打开功能无需手工填写参数。
+- 还提供 GitHub Pages 的短路径入口：`网站地址/后缀` 或 `网站地址/a/后缀`。它会先查找此浏览器的同名本地应用，再查找默认公开仓库；不同数据仓库可使用完整运行链接或加上 `owner`、`repo`、`branch` 查询参数。短路径路由只发生在本站内。
 
-`ui/index.html` 是单文件前端，`worker/backend.js` 是 Cloudflare Worker 后端。云端身份由 Sites 注入，按用户 ID 隔离；文件及上传会话保存在 R2。小型应用清单也保存在 R2，利用条件写入原子占用后缀，避免额外数据库迁移。每次上传带独立 revision，避免删除后旧请求污染同名新应用。
+这是一台**静态应用发布器**：不执行 Node/Python/PHP 后端，也不负责同步上传应用自身的业务数据。没有预设国内专线或测速证明。
 
-所有写请求要求同源 Origin 和专用请求头；运行内容无法访问管理 API。私有资源禁止浏览器持久缓存，避免在公共电脑换账户后读取上个账户的缓存。上传分片支持重试、续传、取消和 multipart 清理。删除会移除清单与云端文件；删除后的数据无法恢复。
+## 运行权限与数据边界
 
-## 开发与检查
+上传应用在独立、无 opener 的窗口中运行。管理页把固定文件清单和只读会话直接交给 Service Worker；运行页面和上传应用不接收 GitHub 令牌，不能要求运行器代为访问任意 GitHub API。运行会话只读取批准清单内的分块。
+
+为兼容 modules、fetch 和浏览器存储，应用在本站来源中执行；浏览器 localStorage 与 IndexedDB 仍是共享的。**只运行你信任的应用**，不要把它当作隔离不可信代码的安全容器。GitHub 令牌始终不持久保存。
+
+云端删除会移除当前数据分支的应用清单及不再引用的文件；**Git 历史仍可能保留旧内容**。若曾向公开仓库上传秘密，应立即撤销秘密，并使用 GitHub 的历史清理流程；普通删除不能撤回已公开的数据。
+
+## 开发和验证
 
 需要 Node.js 22+。
 
 ```sh
+npm ci
 npm test
-npm run build
-npm run dev
+npm run check
+npm run dev -- --base /TycGame/
 ```
 
-生产代码没有第三方运行依赖。`npm run dev` 通过 Wrangler 4 启动本地 R2，首次运行需要下载 Wrangler。本地开发只在回环地址注入测试身份，数据仅保存在本机；`worker/local.js` 不会打包到线上。
+本地地址为 `http://127.0.0.1:4173/TycGame/`，可验证与 GitHub Pages 相同的子路径。生产运行不需要 npm 包或 CDN；ZIP 库 fflate 已连同 MIT 许可放在 `assets/vendor/`。
 
-Sites 使用 `.openai/hosting.json` 中的项目身份与 R2 绑定。`npm run build` 将前端内嵌到 `dist/server/index.js`，生成 Worker 发布产物。
+```sh
+npm run build
+```
 
-自行迁移到 Cloudflare 时，可参考 `wrangler.toml`，创建对应 R2 bucket，并在可信认证网关中验证登录后注入身份。**不能直接公开部署依赖身份请求头的 Worker**：必须保证只有认证网关能设置这些头。GitHub Pages 只能展示静态入口，无法独立提供云端登录、R2 文件保存或上传 API。
+生成的 `dist/` 是纯静态网站。GitHub Pages 使用 **Deploy from a branch → main → /(root)** 时，也可直接部署根目录，不需要构建；`.nojekyll` 已包含。上传数据分支无需开启 Pages。
 
-## GitHub 与云端数据
+测试覆盖 GitHub REST 协议模拟、分块与续传、并发 Git 引用冲突、源码分支保护、令牌不持久化、IndexedDB、ZIP 路径验证等。真实 Chromium 测试覆盖子路径、手机布局、应用运行和 Service Worker 流式资源；模拟测试不代表 GitHub 公网带宽测速。
 
-这个仓库存放完整源码、测试与部署配置。仓库首页的“进入 HTML 发布器”链接用于打开已部署网站；GitHub 的代码文件页面本身不会执行 HTML。根目录 `index.html` 也是指向当前网站的入口，可用于静态托管。上传的私人 HTML / Web APP 保存在云存储，不作为 Git 提交推送，也不会自动备份到此仓库。
+## 文件结构
+
+- `index.html` / `assets/styles.css` / `assets/app.js`：完整发布器界面与交互。
+- `assets/github-store.js`：GitHub 云存储，独立数据分支与原子 Git 提交。
+- `assets/local-store.js`：真实 IndexedDB 本地体验。
+- `assets/archive.js`：ZIP 上传及下载。
+- `run.html` / `assets/runner.js` / `sw.js`：独立应用运行器与流式虚拟文件服务。
+- `tests/`：不依赖外部账号的自动测试。

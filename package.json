@@ -1,13 +1,15 @@
 {
-  "name": "html-publisher",
-  "version": "1.0.0",
+  "name": "tycgame-publisher",
+  "version": "2.0.0",
   "private": true,
   "type": "module",
-  "description": "跨设备 HTML 与静态 Web APP 云端发布器",
+  "description": "真正运行在 GitHub Pages 的 HTML 与 Web APP 发布器",
   "scripts": {
+    "dev": "node scripts/serve.mjs",
     "build": "node scripts/build.mjs",
-    "test": "node --test scripts/test.mjs",
-    "dev": "node scripts/dev.mjs"
+    "check": "node scripts/check.mjs",
+    "test": "node --test tests/*.test.mjs"
   },
+  "devDependencies": { "fake-indexeddb": "6.2.6" },
   "engines": { "node": ">=22" }
 }

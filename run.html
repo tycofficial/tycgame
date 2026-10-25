@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://api.github.com https://raw.githubusercontent.com; frame-src 'self' blob:; worker-src 'self'; object-src 'none'; base-uri 'self'">
+  <title>运行应用 · TycGame</title>
+  <style>
+    *{box-sizing:border-box}html,body{width:100%;height:100%;margin:0}body{background:#f3f5fa;color:#202b40;font:14px/1.7 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}header{height:58px;display:flex;align-items:center;justify-content:space-between;padding:0 23px;background:white;border-bottom:1px solid #e5eaf3;gap:16px}a{color:#415be7;text-decoration:none}.brand{font-weight:750;letter-spacing:-.5px;color:#222c42}.brand span{display:inline-grid;place-items:center;width:28px;height:28px;margin-right:9px;border-radius:9px;color:#fff;background:#4764f5}.meta{color:#8a94a8;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.actions{display:flex;align-items:center;gap:18px;font-size:12px;flex-shrink:0}main{height:calc(100% - 58px)}iframe{width:100%;height:100%;border:0;background:white}#status{height:100%;display:flex;align-items:center;justify-content:center;padding:28px}.card{width:min(490px,100%);padding:36px;border:1px solid #e2e7f1;border-radius:20px;background:white;box-shadow:0 15px 45px #24314c06}.label{font-size:10px;letter-spacing:2px;color:#7c88a2}h1{font-size:24px;letter-spacing:-.7px;margin:16px 0 10px}p{color:#7c889d;line-height:1.9;margin:8px 0 22px}.button{display:inline-block;background:#4664f2;color:white;padding:10px 17px;border:0;border-radius:9px;font:inherit;cursor:pointer}.hidden{display:none!important}.spinner{height:25px;width:25px;border:2px solid #e7ebfb;border-top-color:#4764f5;border-radius:50%;animation:spin .8s linear infinite;margin-bottom:24px}@keyframes spin{to{transform:rotate(360deg)}}@media(max-width:520px){header{padding:0 15px}.meta{display:none}.actions{gap:12px}.card{padding:27px}h1{font-size:22px}}
+  </style>
+</head>
+<body>
+  <header><a class="brand" href="./"><span>T</span>TycGame</a><span class="meta" id="appLabel">云端应用运行器</span><div class="actions"><button id="retry" class="hidden" style="border:0;background:none;color:#415be7;cursor:pointer">重新加载</button><a href="./">返回应用库 ↗</a></div></header>
+  <main><section id="status" role="status" aria-live="polite"><div class="card"><div class="spinner" id="spinner"></div><span class="label">YOUR APPS, ANYWHERE</span><h1 id="statusTitle">正在唤醒你的应用</h1><p id="statusText">正在连接 GitHub 云端文件，准备安全运行环境…</p><a class="button hidden" id="homeButton" href="./">返回主页连接仓库</a></div></section><iframe id="appFrame" class="hidden" title="已发布的应用" sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups allow-downloads" allow="fullscreen; clipboard-write"></iframe></main>
+  <script type="module" src="assets/runner.js"></script>
+</body>
+</html>
